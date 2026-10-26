@@ -188,6 +188,38 @@ function calculateGroupBTL(group) {
   };
 }
 
+// Key định danh lưu trữ dữ liệu trong localStorage của trình duyệt
+const STORAGE_KEY = "WEBPAGE_TINHDIEM_BTL_DATA_V1";
+
+/**
+ * Đọc dữ liệu đã lưu từ localStorage, nếu chưa có thì dùng INITIAL_DATA
+ */
+function getInitialGroups() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn("Không thể đọc từ localStorage:", err);
+  }
+  return JSON.parse(JSON.stringify(INITIAL_DATA));
+}
+
+/**
+ * Tự động lưu danh sách nhóm vào localStorage
+ */
+function saveGroupsToStorage(groups) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(groups));
+  } catch (err) {
+    console.warn("Không thể lưu vào localStorage:", err);
+  }
+}
+
 /**
  * ============================================================================
  * LỚP COMPONENT CHÍNH CỦA REACT (Sử dụng cơ chế setState)
@@ -197,11 +229,8 @@ class BTLGradeCalculator extends React.Component {
   constructor(props) {
     super(props);
 
-    // Khởi tạo State:
-    // - groups: chứa toàn bộ giá trị nhập liệu hiện tại của các nhóm
-    // - savedScores: lưu điểm BTL hợp lệ gần nhất của từng thành viên
-    // - groupStatuses: lưu trạng thái xác thực và ghi chú của từng nhóm
-    const initialGroups = JSON.parse(JSON.stringify(INITIAL_DATA));
+    // Khởi tạo State (ưu tiên đọc từ localStorage để giữ lại điểm đã nhập):
+    const initialGroups = getInitialGroups();
     const initialSavedScores = {};
     const initialStatuses = {};
 
@@ -276,6 +305,9 @@ class BTLGradeCalculator extends React.Component {
         };
       }
 
+      // Tự động lưu trạng thái mới nhất vào localStorage để không bị mất khi đóng trang
+      saveGroupsToStorage(newGroups);
+
       return {
         groups: newGroups,
         savedScores: newSavedScores,
@@ -310,9 +342,15 @@ class BTLGradeCalculator extends React.Component {
   }
 
   /**
-   * Nạp lại dữ liệu chuẩn ban đầu
+   * Nạp lại dữ liệu chuẩn ban đầu & Xóa bộ nhớ đã lưu
    */
   handleResetDefault() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      console.warn("Không thể xóa localStorage:", e);
+    }
+
     const initialGroups = JSON.parse(JSON.stringify(INITIAL_DATA));
     const initialSavedScores = {};
     const initialStatuses = {};
@@ -416,6 +454,9 @@ class BTLGradeCalculator extends React.Component {
         };
       }
 
+      // Tự động lưu nhóm mới vào localStorage
+      saveGroupsToStorage(newGroups);
+
       return {
         groups: newGroups,
         savedScores: newSavedScores,
@@ -439,9 +480,13 @@ class BTLGradeCalculator extends React.Component {
               <span>🎓</span> Hệ Thống Tính Điểm Bài Tập Lớn (BTL)
             </h1>
             <p>Môn Công Nghệ Web | React Component với cơ chế setState & Re-render tự động</p>
-          </div>
-          <div className="header-badge">
-            <span>⚡</span> React State Management
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div className="header-badge" style={{ background: "rgba(16, 185, 129, 0.25)", border: "1px solid #10b981", color: "#ecfdf5" }}>
+              <span>💾</span> Tự động lưu điểm (localStorage)
+            </div>
+            <div className="header-badge">
+              <span>⚡</span> React State Management
+            </div>
           </div>
         </header>
 

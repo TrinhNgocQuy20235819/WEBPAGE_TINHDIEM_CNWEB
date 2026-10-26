@@ -66,6 +66,7 @@ Theo yêu cầu đặc biệt của đề bài:
   2. Hàm `calculateGroupBTL(group)` được gọi để kiểm tra tính hợp lệ của nhóm.
   3. **Nếu tổng $\ne 100\%$ hoặc nhập sai**: `savedScores` **hoàn toàn giữ nguyên không đổi** $\implies$ Giao diện điểm BTL tiếp tục hiển thị điểm hợp lệ trước đó, đồng thời hiển thị huy hiệu cảnh báo (màu vàng/đỏ) thông báo tổng % hiện tại.
   4. **Khi người dùng sửa bạn tiếp theo làm tổng đạt đúng 100%**: `savedScores` được cập nhật $\implies$ React kích hoạt re-render hiển thị điểm BTL mới ngay lập tức.
+- **💾 Lưu trữ liên tục (localStorage)**: Ứng dụng tự động lưu toàn bộ dữ liệu bạn đã nhập vào bộ nhớ `localStorage` của trình duyệt. Khi bạn tắt trình duyệt hoặc tắt máy, hôm sau mở lại dữ liệu điểm của tất cả sinh viên vẫn được bảo lưu 100%. Nhấn *"Nạp lại dữ liệu mặc định"* nếu muốn khôi phục về đề bài ban đầu.
 
 ---
 
