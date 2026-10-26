@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tính Điểm BTL - Công Nghệ Web</title>
+  
+  <!-- Phông chữ Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- React 18, ReactDOM 18 & Babel Standalone CDN với cơ chế dự phòng đa nguồn -->
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script>window.React || document.write('<script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>');</script>
+  
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script>window.ReactDOM || document.write('<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>');</script>
+  
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script>window.Babel || document.write('<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>');</script>
+</head>
+<body>
+  <!-- Container gốc để React Render -->
+  <div id="root">
+    <div style="text-align: center; padding: 50px; font-family: sans-serif; color: #475569;">
+      <h2>Đang tải giao diện Hệ thống Tính Điểm BTL...</h2>
+      <p>Vui lòng đợi giây lát trong khi React khởi tạo.</p>
+    </div>
+  </div>
+
+  <!-- Mã nguồn React Component với JSX (Babel biên dịch trực tiếp) -->
+  <script type="text/babel">
+    const { Component } = React;
+
+    // Dữ liệu mẫu khởi tạo theo đúng yêu cầu đề bài:
+    // Nhóm 1: 20122 (Nakaji), 20133 (Shin)
+    // Nhóm 2: 20455 (An), 20311 (Bảo)
+    const INITIAL_DATA = [
+      {
+        id: 1,
+        groupScoreInput: "16", // 16/20 -> Quy ra hệ 10 là 8.0
+        members: [
+          { id: "20122", mssv: "20122", name: "Nakaji", contributionInput: "50", bonusInput: "1" },
+          { id: "20133", mssv: "20133", name: "Shin", contributionInput: "50", bonusInput: "0" }
+        ]
+      },
+      {
+        id: 2,
+        groupScoreInput: "17.5", // 17.5/20 -> Quy ra hệ 10 là 8.75
+        members: [
+          { id: "20455", mssv: "20455", name: "An", contributionInput: "50", bonusInput: "0.5" },
+          { id: "20311", mssv: "20311", name: "Bảo", contributionInput: "50", bonusInput: "0" }
+        ]
+      }
+    ];
+
+    /**
+     * Hàm tính điểm BTL độc lập cho một nhóm theo đúng thuật toán đề bài:
+     * 1. Điểm nhóm quy ra hệ 10 = Điểm nhóm / 2 (vì thang 20)
+     * 2. Điểm TB đóng góp x = 100% / N (N là số thành viên)
+     * 3. y > x: nhóm cộng điểm
+     *    y < x: nhóm trừ điểm. Tính z = |y - x| * 10 / x.
+     * 4. Tổng Z = tổng các z của các bạn bị trừ.
+     *    M = số bạn được cộng.
+     *    T = Z / M (điểm cộng cho mỗi bạn được cộng).
+     * 5. Điểm BTL = S10 (+ T hoặc - z) + Điểm cộng
+     *    Chặn tối đa 10 (nếu > 10 thì làm tròn thành 10).
+     */
+    function calculateGroupBTL(group) {
+      // 1. Kiểm tra điểm nhóm
+      if (group.groupScoreInput === "" || isNaN(group.groupScoreInput)) {
+        return { isValid: false, reason: "Vui lòng nhập điểm nhóm hợp lệ (0 - 20)" };
+      }
+      const groupScore = parseFloat(group.groupScoreInput);
+      if (groupScore < 0 || groupScore > 20) {
+        return { isValid: false, reason: "Điểm nhóm tối đa là 20 và không được âm" };
+      }
+
+      const N = group.members.length;
+      if (N === 0) {
+        return { isValid: false, reason: "Nhóm cần có ít nhất 1 thành viên" };
+      }
+
+      // 2. Kiểm tra đóng góp của từng thành viên
+      let totalContribution = 0;
+      for (let m of group.members) {
+        if (m.contributionInput === "" || isNaN(m.contributionInput)) {
+          return { 
+            isValid: false, 
+            reason: `Thành viên ${m.name || m.mssv} chưa nhập điểm đóng góp hợp lệ` 
+          };
+        }
+        const c = parseFloat(m.contributionInput);
+        if (c < 0 || c > 100) {
+          return { 
+            isValid: false, 
+            reason: `Điểm đóng góp của ${m.name || m.mssv} phải nằm trong khoảng 0% - 100%` 
+          };
+        }
+        totalContribution += c;
+      }
+
+      // 3. Quy tắc cốt lõi: Tổng đóng góp phải bằng đúng 100%
+      // Nếu nhóm trưởng sửa làm tổng khác 100%, điểm không cập nhật!
+      if (Math.abs(totalContribution - 100) > 0.001) {
+        return {
+          isValid: false,
+          isContributionMismatch: true,
+          currentTotal: totalContribution,
+          reason: `Tổng đóng góp hiện tại là ${totalContribution.toFixed(1)}% (chưa bằng 100%). Điểm BTL chưa cập nhật (đang giữ kết quả hợp lệ trước đó).`
+        };
+      }
+
+      // 4. Kiểm tra điểm cộng
+      for (let m of group.members) {
+        if (m.bonusInput !== "" && isNaN(m.bonusInput)) {
+          return { isValid: false, reason: `Điểm cộng của ${m.name || m.mssv} phải là số` };
+        }
+        if (m.bonusInput !== "" && parseFloat(m.bonusInput) < 0) {
+          return { isValid: false, reason: `Điểm cộng của ${m.name || m.mssv} không được âm` };
+        }
+      }
+
+      // --- TẤT CẢ HỢP LỆ: BẮT ĐẦU TÍNH TOÁN ---
+      // Bước 1: Quy ra hệ 10
+      const S10 = groupScore / 2; // (groupScore / 20) * 10
+
+      // Bước 2: Điểm TB đóng góp
+      const x = 100 / N;
+
+      // Bước 3: Phân nhóm cộng / trừ
+      let minusList = [];
+      let plusList = [];
+      let neutralList = [];
+      let Z = 0;
+
+      const memberMetrics = {};
+
+      group.members.forEach(m => {
+        const y = parseFloat(m.contributionInput);
+        const bonus = m.bonusInput === "" ? 0 : parseFloat(m.bonusInput);
+
+        if (y < x) {
+          // Bạn bị trừ: z = |y - x| * 10 / x
+          const z = (Math.abs(y - x) * 10) / x;
+          Z += z;
+          minusList.push({ member: m, y, bonus, z });
+          memberMetrics[m.id] = { type: "minus", y, bonus, z, T: 0 };
+        } else if (y > x) {
+          plusList.push({ member: m, y, bonus });
+          memberMetrics[m.id] = { type: "plus", y, bonus, z: 0, T: 0 };
+        } else {
+          neutralList.push({ member: m, y, bonus });
+          memberMetrics[m.id] = { type: "neutral", y, bonus, z: 0, T: 0 };
+        }
+      });
+
+      // Bước 4: Chia đều tổng Z cho M bạn được cộng
+      const M = plusList.length;
+      const T = M > 0 ? Z / M : 0;
+
+      plusList.forEach(item => {
+        memberMetrics[item.member.id].T = T;
+      });
+
+      // Bước 5: Tính điểm BTL cuối cùng và chặn tối đa 10
+      const results = {};
+      group.members.forEach(m => {
+        const metric = memberMetrics[m.id];
+        let rawScore = S10;
+        let adjustment = 0;
+
+        if (metric.type === "plus") {
+          adjustment = metric.T;
+          rawScore = S10 + metric.T + metric.bonus;
+        } else if (metric.type === "minus") {
+          adjustment = -metric.z;
+          rawScore = S10 - metric.z + metric.bonus;
+        } else {
+          adjustment = 0;
+          rawScore = S10 + metric.bonus;
+        }
+
+        // "Từ đó suy ra điểm BTL của mỗi bạn, điểm nào vượt quá 10 thì bị làm tròn thành 10"
+        let finalScore = Math.min(10, Math.max(0, rawScore));
+        finalScore = Math.round(finalScore * 100) / 100;
+
+        results[m.id] = {
+          mssv: m.mssv,
+          name: m.name,
+          S10: S10,
+          x: x,
+          y: metric.y,
+          type: metric.type,
+          z: metric.z,
+          T: metric.T,
+          bonus: metric.bonus,
+          adjustment: adjustment,
+          rawScore: Math.round(rawScore * 100) / 100,
+          finalScore: finalScore.toFixed(2),
+          isClamped: rawScore > 10
+        };
+      });
+
+      return {
+        isValid: true,
+        S10,
+        x,
+        Z,
+        M,
+        T,
+        totalContribution: 100,
+        results
+      };
+    }
+
+    /**
+     * ============================================================================
+     * REACT COMPONENT: BTLGradeCalculator (Sử dụng cơ chế setState)
+     * ============================================================================
+     */
+    class BTLGradeCalculator extends Component {
+      constructor(props) {
+        super(props);
+
+        // State quản lý toàn bộ dữ liệu giao diện
+        const initialGroups = JSON.parse(JSON.stringify(INITIAL_DATA));
+        const initialSavedScores = {};
+        const initialStatuses = {};
+
+        // Khởi tạo điểm ban đầu
+        initialGroups.forEach(group => {
+          const calc = calculateGroupBTL(group);
+          if (calc.isValid) {
+            Object.assign(initialSavedScores, calc.results);
+            initialStatuses[group.id] = {
+              isValid: true,
+              message: "✓ Đã cập nhật điểm BTL (Tổng đóng góp = 100%)",
+              totalContribution: 100,
+              details: calc
+            };
+          }
+        });
+
+        this.state = {
+          groups: initialGroups,
+          savedScores: initialSavedScores,
+          groupStatuses: initialStatuses,
+          selectedGroupForDetails: 1
+        };
+
+        // Binding các phương thức xử lý sự kiện
+        this.handleGroupScoreChange = this.handleGroupScoreChange.bind(this);
+        this.handleMemberFieldChange = this.handleMemberFieldChange.bind(this);
+        this.handleResetDefault = this.handleResetDefault.bind(this);
+        this.handleSimulateMismatch = this.handleSimulateMismatch.bind(this);
+        this.handleAddMember = this.handleAddMember.bind(this);
+        this.handleRemoveMember = this.handleRemoveMember.bind(this);
+        this.handleAddGroup = this.handleAddGroup.bind(this);
+      }
+
+      /**
+       * Hàm cốt lõi: Cập nhật dữ liệu nhóm và tính toán lại thông qua setState
+       */
+      updateGroupAndRecalculate(groupId, updateFn) {
+        this.setState(prevState => {
+          const newGroups = prevState.groups.map(g => {
+            if (g.id === groupId) {
+              return updateFn(JSON.parse(JSON.stringify(g)));
+            }
+            return g;
+          });
+
+          const targetGroup = newGroups.find(g => g.id === groupId);
+          const calcResult = calculateGroupBTL(targetGroup);
+
+          const newStatuses = { ...prevState.groupStatuses };
+          const newSavedScores = { ...prevState.savedScores };
+
+          if (calcResult.isValid) {
+            // HỢP LỆ (TỔNG = 100%): CẬP NHẬT ĐIỂM BTL MỚI
+            Object.assign(newSavedScores, calcResult.results);
+            newStatuses[groupId] = {
+              isValid: true,
+              message: "✓ Đã cập nhật điểm BTL (Tổng đóng góp = 100%)",
+              totalContribution: 100,
+              details: calcResult
+            };
+          } else {
+            // KHÔNG HỢP LỆ HOẶC TỔNG != 100%:
+            // BẢO LƯU newSavedScores KHÔNG ĐỔI!
+            newStatuses[groupId] = {
+              isValid: false,
+              isMismatch: calcResult.isContributionMismatch || false,
+              message: calcResult.reason,
+              totalContribution: calcResult.currentTotal !== undefined ? calcResult.currentTotal : null
+            };
+          }
+
+          return {
+            groups: newGroups,
+            savedScores: newSavedScores,
+            groupStatuses: newStatuses
+          };
+        });
+      }
+
+      handleGroupScoreChange(groupId, event) {
+        const val = event.target.value;
+        this.updateGroupAndRecalculate(groupId, group => {
+          group.groupScoreInput = val;
+          return group;
+        });
+      }
+
+      handleMemberFieldChange(groupId, memberId, field, event) {
+        const val = event.target.value;
+        this.updateGroupAndRecalculate(groupId, group => {
+          const member = group.members.find(m => m.id === memberId);
+          if (member) {
+            member[field] = val;
+          }
+          return group;
+        });
+      }
+
+      handleResetDefault() {
+        const initialGroups = JSON.parse(JSON.stringify(INITIAL_DATA));
+        const initialSavedScores = {};
+        const initialStatuses = {};
+
+        initialGroups.forEach(group => {
+          const calc = calculateGroupBTL(group);
+          if (calc.isValid) {
+            Object.assign(initialSavedScores, calc.results);
+            initialStatuses[group.id] = {
+              isValid: true,
+              message: "✓ Đã cập nhật điểm BTL (Tổng đóng góp = 100%)",
+              totalContribution: 100,
+              details: calc
+            };
+          }
+        });
+
+        this.setState({
+          groups: initialGroups,
+          savedScores: initialSavedScores,
+          groupStatuses: initialStatuses,
+          selectedGroupForDetails: 1
+        });
+      }
+
+      handleSimulateMismatch() {
+        // Mô phỏng: Nhóm trưởng sửa bạn Nakaji từ 50% lên 60%
+        // Tổng nhóm 1 thành 60 + 50 = 110% -> Điểm BTL chưa cập nhật!
+        this.updateGroupAndRecalculate(1, group => {
+          const nakaji = group.members.find(m => m.name === "Nakaji");
+          if (nakaji) {
+            nakaji.contributionInput = "60";
+          }
+          return group;
+        });
+      }
+
+      handleAddMember(groupId) {
+        this.updateGroupAndRecalculate(groupId, group => {
+          const newId = "sv_" + Date.now().toString().slice(-4);
+          group.members.push({
+            id: newId,
+            mssv: newId,
+            name: "SV Mới",
+            contributionInput: "0",
+            bonusInput: "0"
+          });
+          return group;
+        });
+      }
+
+      handleRemoveMember(groupId, memberId) {
+        this.updateGroupAndRecalculate(groupId, group => {
+          if (group.members.length <= 1) {
+            alert("Nhóm phải có tối thiểu 1 thành viên!");
+            return group;
+          }
+          group.members = group.members.filter(m => m.id !== memberId);
+          return group;
+        });
+      }
+
+      handleAddGroup() {
+        this.setState(prevState => {
+          const nextGroupId = prevState.groups.length > 0 ? Math.max(...prevState.groups.map(g => g.id)) + 1 : 1;
+          const newGroup = {
+            id: nextGroupId,
+            groupScoreInput: "15",
+            members: [
+              { id: `sv_${nextGroupId}_1`, mssv: `209${nextGroupId}1`, name: `Sinh viên A${nextGroupId}`, contributionInput: "50", bonusInput: "0" },
+              { id: `sv_${nextGroupId}_2`, mssv: `209${nextGroupId}2`, name: `Sinh viên B${nextGroupId}`, contributionInput: "50", bonusInput: "0" }
+            ]
+          };
+
+          const newGroups = [...prevState.groups, newGroup];
+          const calcResult = calculateGroupBTL(newGroup);
+          const newSavedScores = { ...prevState.savedScores };
+          const newStatuses = { ...prevState.groupStatuses };
+
+          if (calcResult.isValid) {
+            Object.assign(newSavedScores, calcResult.results);
+            newStatuses[nextGroupId] = {
+              isValid: true,
+              message: "✓ Đã cập nhật điểm BTL (Tổng đóng góp = 100%)",
+              totalContribution: 100,
+              details: calcResult
+            };
+          }
+
+          return {
+            groups: newGroups,
+            savedScores: newSavedScores,
+            groupStatuses: newStatuses,
+            selectedGroupForDetails: nextGroupId
+          };
+        });
+      }
+
+      render() {
+        const { groups, savedScores, groupStatuses, selectedGroupForDetails } = this.state;
+        const selectedGroup = groups.find(g => g.id === selectedGroupForDetails) || groups[0];
+        const selectedCalcDetails = selectedGroup ? calculateGroupBTL(selectedGroup) : null;
+
+        return (
+          <div className="container">
+            {/* HEADER */}
+            <header className="app-header">
+              <div className="header-title-group">
+                <h1>
+                  <span>🎓</span> Hệ Thống Tính Điểm Bài Tập Lớn (BTL)
+                </h1>
+                <p>Môn Công Nghệ Web | React Component với cơ chế setState &amp; Re-render tự động</p>
+              </div>
+              <div className="header-badge">
+                <span>⚡</span> React State Management
+              </div>
+            </header>
+
+            {/* THÔNG TIN QUY TẮC CHẤM ĐIỂM */}
+            <section className="rules-card">
+              <h3>
+                <span>📋</span> Quy tắc tính điểm &amp; Điều kiện cập nhật
+              </h3>
+              <div className="rules-grid">
+                <div className="rule-item">
+                  <strong>1. Điểm nhóm (Hệ 20):</strong> Tối đa 20 điểm, có thể lẻ đến 0.5.
+                  Quy ra hệ 10: <code>S₁₀ = Điểm nhóm / 2</code>.
+                </div>
+                <div className="rule-item">
+                  <strong>2. Tổng đóng góp = 100%:</strong> Đóng góp mỗi bạn ≤ 100%. 
+                  <em> Nếu tổng ≠ 100% hoặc nhập sai, điểm BTL chưa cập nhật</em> (giữ điểm hợp lệ cũ).
+                </div>
+                <div className="rule-item">
+                  <strong>3. Nhóm Cộng / Trừ:</strong> Đóng góp TB <code>x = 100% / N</code>.
+                  Nếu <code>y &lt; x</code>: trừ <code>z = |y - x| * 10 / x</code>.
+                  Tổng Z được chia đều <code>T = Z / M</code> cho các bạn <code>y &gt; x</code>.
+                </div>
+                <div className="rule-item">
+                  <strong>4. Điểm BTL &amp; Làm tròn:</strong> <code>Điểm BTL = S₁₀ (± điều chỉnh) + Điểm cộng</code>.
+                  Nếu điểm vượt quá 10 sẽ được làm tròn/chặn thành <strong>10.00</strong>.
+                </div>
+              </div>
+            </section>
+
+            {/* THANH CÔNG CỤ TÁC VỤ */}
+            <div className="action-bar">
+              <div className="btn-group">
+                <button className="btn btn-secondary btn-sm" onClick={this.handleResetDefault} title="Khôi phục lại dữ liệu mẫu gốc">
+                  🔄 Nạp lại dữ liệu mặc định
+                </button>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  onClick={this.handleSimulateMismatch}
+                  title="Mô phỏng: Nhóm trưởng sửa bạn Nakaji thành 60% làm tổng = 110%, kiểm tra điểm không cập nhật"
+                >
+                  🧪 Thử nghiệm: Sửa Nakaji 60% (Lệch 110%)
+                </button>
+              </div>
+              <div className="btn-group">
+                <button className="btn btn-primary btn-sm" onClick={this.handleAddGroup}>
+                  ➕ Thêm nhóm mới
+                </button>
+              </div>
+            </div>
+
+            {/* BẢNG TÍNH ĐIỂM BTL (GIAO DIỆN CHÍNH THEO ĐÚNG MẪU ĐỀ BÀI) */}
+            <main className="table-card">
+              <table className="btl-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "90px", textAlign: "center" }}># nhóm</th>
+                    <th style={{ width: "120px" }}>MSSV</th>
+                    <th style={{ width: "160px" }}>Họ tên</th>
+                    <th style={{ width: "180px", textAlign: "center" }}>Điểm nhóm</th>
+                    <th style={{ width: "140px", textAlign: "center" }}>Đóng góp</th>
+                    <th style={{ width: "120px", textAlign: "center" }}>Điểm cộng</th>
+                    <th style={{ width: "140px", textAlign: "center" }}>Điểm BTL</th>
+                    <th style={{ width: "80px", textAlign: "center" }}>Tác vụ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map(group => {
+                    const status = groupStatuses[group.id] || { isValid: false, message: "Đang chờ nhập liệu" };
+                    const memberCount = group.members.length;
+
+                    return group.members.map((member, index) => {
+                      const isFirstRow = index === 0;
+                      const memberScoreInfo = savedScores[member.id];
+                      const hasValidScore = memberScoreInfo !== undefined;
+                      const scoreValue = hasValidScore ? parseFloat(memberScoreInfo.finalScore) : null;
+
+                      // Phân loại màu sắc điểm số
+                      let scoreBadgeClass = "score-pending";
+                      if (hasValidScore) {
+                        if (scoreValue >= 8.5) scoreBadgeClass = "score-high";
+                        else if (scoreValue >= 6.5) scoreBadgeClass = "score-medium";
+                        else if (scoreValue >= 5.0) scoreBadgeClass = "score-low";
+                        else scoreBadgeClass = "score-fail";
+                      }
+
+                      return (
+                        <tr 
+                          key={member.id} 
+                          className={isFirstRow ? "group-row-divider" : ""}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => this.setState({ selectedGroupForDetails: group.id })}
+                        >
+                          {/* Cột 1: # nhóm (Gộp dòng theo số lượng thành viên) */}
+                          {isFirstRow && (
+                            <td 
+                              rowSpan={memberCount} 
+                              className="group-header-cell"
+                              title={`Bấm để xem chi tiết giải trình của Nhóm ${group.id}`}
+                            >
+                              <div style={{ fontWeight: "800", fontSize: "1.25rem" }}>
+                                {group.id}
+                              </div>
+                              <button 
+                                className="btn btn-secondary btn-sm" 
+                                style={{ marginTop: "8px", fontSize: "0.75rem", padding: "4px 8px" }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  this.handleAddMember(group.id);
+                                }}
+                                title="Thêm thành viên vào nhóm này"
+                              >
+                                + Thêm SV
+                              </button>
+                            </td>
+                          )}
+
+                          {/* Cột 2: MSSV */}
+                          <td>
+                            <input
+                              type="text"
+                              className="table-input"
+                              style={{ width: "100px", fontWeight: "600" }}
+                              value={member.mssv}
+                              onChange={(e) => this.handleMemberFieldChange(group.id, member.id, "mssv", e)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
+
+                          {/* Cột 3: Họ tên */}
+                          <td>
+                            <input
+                              type="text"
+                              className="table-input"
+                              style={{ width: "140px", fontWeight: "500" }}
+                              value={member.name}
+                              onChange={(e) => this.handleMemberFieldChange(group.id, member.id, "name", e)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
+
+                          {/* Cột 4: Điểm nhóm (______/20 - Gộp dòng theo nhóm) */}
+                          {isFirstRow && (
+                            <td rowSpan={memberCount} className="group-score-cell" style={{ textAlign: "center" }}>
+                              <div className="input-wrapper" style={{ justifyContent: "center" }}>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0"
+                                  max="20"
+                                  className="table-input input-score"
+                                  placeholder="____"
+                                  value={group.groupScoreInput}
+                                  onChange={(e) => this.handleGroupScoreChange(group.id, e)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <span className="input-unit">/20</span>
+                              </div>
+
+                              {/* Trạng thái xác thực của nhóm */}
+                              <div 
+                                className={`group-status-panel ${
+                                  status.isValid 
+                                    ? "group-status-valid" 
+                                    : status.isMismatch 
+                                      ? "group-status-pending" 
+                                      : "group-status-error"
+                                }`}
+                                style={{ margin: "10px auto 0", maxWidth: "210px", textAlign: "left" }}
+                              >
+                                <span>{status.isValid ? "✅" : status.isMismatch ? "⚠️" : "❌"}</span>
+                                <div>
+                                  <div>{status.message}</div>
+                                  {status.totalContribution !== null && (
+                                    <div style={{ fontSize: "0.72rem", opacity: 0.9 }}>
+                                      Tổng hiện tại: <strong>{status.totalContribution.toFixed(1)}%</strong>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          )}
+
+                          {/* Cột 5: Đóng góp (___%) */}
+                          <td style={{ textAlign: "center" }}>
+                            <div className="input-wrapper" style={{ justifyContent: "center" }}>
+                              <input
+                                type="number"
+                                step="1"
+                                min="0"
+                                max="100"
+                                className="table-input input-percent"
+                                placeholder="___"
+                                value={member.contributionInput}
+                                onChange={(e) => this.handleMemberFieldChange(group.id, member.id, "contributionInput", e)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <span className="input-unit">%</span>
+                            </div>
+                          </td>
+
+                          {/* Cột 6: Điểm cộng (___) */}
+                          <td style={{ textAlign: "center" }}>
+                            <div className="input-wrapper" style={{ justifyContent: "center" }}>
+                              <input
+                                type="number"
+                                step="0.25"
+                                min="0"
+                                className="table-input input-bonus"
+                                placeholder="___"
+                                value={member.bonusInput}
+                                onChange={(e) => this.handleMemberFieldChange(group.id, member.id, "bonusInput", e)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                          </td>
+
+                          {/* Cột 7: Điểm BTL (Tự động tính và chỉ cập nhật khi hợp lệ) */}
+                          <td style={{ textAlign: "center" }}>
+                            <div className={`score-badge ${scoreBadgeClass}`}>
+                              {hasValidScore ? memberScoreInfo.finalScore : "Chưa có"}
+                            </div>
+                            {hasValidScore && memberScoreInfo.isClamped && (
+                              <div style={{ fontSize: "0.7rem", color: "#b45309", marginTop: "2px" }}>
+                                (Chặn max 10)
+                              </div>
+                            )}
+                            {!status.isValid && hasValidScore && (
+                              <div style={{ fontSize: "0.68rem", color: "#d97706", marginTop: "2px" }}>
+                                (Điểm cũ)
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Cột 8: Xóa thành viên */}
+                          <td style={{ textAlign: "center" }}>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              style={{ padding: "4px 8px", color: "#ef4444" }}
+                              title="Xóa thành viên này"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                this.handleRemoveMember(group.id, member.id);
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })}
+                </tbody>
+              </table>
+            </main>
+
+            {/* BẢNG GIẢI TRÌNH CÔNG THỨC CHI TIẾT THEO TỪNG NHÓM */}
+            <section className="details-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                <h3>
+                  <span>🔍</span> Bảng Giải Trình &amp; Chi Tiết Tính Điểm: Nhóm {selectedGroup.id}
+                </h3>
+                <span style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                  (Bấm vào bất kỳ dòng nào của nhóm trên bảng để xem chi tiết)
+                </span>
+              </div>
+
+              {selectedCalcDetails && selectedCalcDetails.isValid ? (
+                <div>
+                  <div className="math-box">
+                    <div><strong>1. Điểm nhóm hệ 10:</strong> S₁₀ = {selectedGroup.groupScoreInput}/20 * 10 = <strong>{selectedCalcDetails.S10.toFixed(2)}</strong></div>
+                    <div><strong>2. Trung bình đóng góp:</strong> x = 100% / {selectedGroup.members.length} = <strong>{selectedCalcDetails.x.toFixed(2)}%</strong></div>
+                    <div><strong>3. Tổng điểm trừ Z của nhóm trừ:</strong> Z = <strong>{selectedCalcDetails.Z.toFixed(2)}</strong></div>
+                    <div><strong>4. Số bạn nhóm cộng M:</strong> M = {selectedCalcDetails.M} thành viên =&gt; Điểm cộng chia đều: <strong>T = Z / M = {selectedCalcDetails.T.toFixed(2)}</strong></div>
+                  </div>
+
+                  <div className="group-summary-card">
+                    <div className="group-summary-header">
+                      <span>Chi tiết từng thành viên trong Nhóm {selectedGroup.id}:</span>
+                      <span className="tag tag-plus">Đã cập nhật theo công thức</span>
+                    </div>
+                    <ul className="member-calc-list">
+                      {selectedGroup.members.map(m => {
+                        const detail = selectedCalcDetails.results[m.id];
+                        if (!detail) return null;
+
+                        let roleTag = <span className="tag tag-neutral">Bằng mức TB</span>;
+                        if (detail.type === "plus") {
+                          roleTag = <span className="tag tag-plus">Được cộng (+{detail.T.toFixed(2)})</span>;
+                        } else if (detail.type === "minus") {
+                          roleTag = <span className="tag tag-minus">Bị trừ (-{detail.z.toFixed(2)})</span>;
+                        }
+
+                        return (
+                          <li key={m.id} className="member-calc-item">
+                            <div>
+                              <strong>{detail.name}</strong> ({detail.mssv}) — Đóng góp: <strong>{detail.y}%</strong> {roleTag}
+                              {detail.bonus > 0 && <span style={{ marginLeft: "8px", color: "#2563eb" }}>+ Điểm thưởng: {detail.bonus}</span>}
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <span style={{ color: "#64748b", fontSize: "0.82rem", marginRight: "12px" }}>
+                                Công thức: {detail.S10.toFixed(2)} {detail.adjustment >= 0 ? `+ ${detail.adjustment.toFixed(2)}` : `- ${Math.abs(detail.adjustment).toFixed(2)}`} + {detail.bonus} = {detail.rawScore}
+                              </span>
+                              <span className="score-badge score-high" style={{ minWidth: "50px", fontSize: "0.95rem", padding: "4px 10px" }}>
+                                {detail.finalScore}
+                              </span>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: "16px", background: "#fffbeb", borderRadius: "8px", border: "1px solid #fde68a", color: "#92400e" }}>
+                  ⚠️ Nhóm {selectedGroup.id} đang có giá trị chưa hợp lệ (hoặc tổng % đóng góp chưa bằng 100%).
+                  <br />
+                  <strong>Lý do:</strong> {groupStatuses[selectedGroup.id]?.message || "Chưa đạt điều kiện 100%"}
+                  <br />
+                  <em>Hệ thống đang bảo lưu điểm BTL hợp lệ gần nhất cho đến khi nhóm trưởng chỉnh sửa lại cho đủ 100%.</em>
+                </div>
+              )}
+            </section>
+
+            {/* FOOTER */}
+            <footer className="app-footer">
+              Bài tập môn Công nghệ Web — Xây dựng bằng React &amp; cơ chế setState với Re-render thời gian thực.
+            </footer>
+          </div>
+        );
+      }
+    }
+
+    // Khởi chạy ứng dụng vào phần tử DOM #root
+    const rootElement = document.getElementById("root");
+    if (window.ReactDOM && window.ReactDOM.createRoot) {
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(<BTLGradeCalculator />);
+    } else if (window.ReactDOM) {
+      ReactDOM.render(<BTLGradeCalculator />, rootElement);
+    }
+  </script>
+</body>
+</html>
